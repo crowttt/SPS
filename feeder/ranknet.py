@@ -32,8 +32,9 @@ class Feeder(torch.utils.data.Dataset):
     """
 
     def __init__(self,
-                 data_path,
                  exp_name,
+                 data_path,
+                 label_path,
                  random_choose=False,
                  random_move=False,
                  window_size=-1,
@@ -57,8 +58,6 @@ class Feeder(torch.utils.data.Dataset):
         # V 代表关节的数量，通常一个人标注 18 个关节。
         # M 代表一帧中的人数，一般选择平均置信度最高的 2 个人。
 
-        self.label =  label
-
         # load data
         if mmap:
             self.data = np.load(self.data_path, mmap_mode='r')
@@ -66,9 +65,7 @@ class Feeder(torch.utils.data.Dataset):
             self.data = np.load(self.data_path)
             
         if self.debug:
-            self.label = self.label[0:100]
             self.data = self.data[0:100]
-            self.sample_name = self.sample_name[0:100]
 
         self.N, self.C, self.T, self.V, self.M = self.data.shape
 
@@ -101,7 +98,7 @@ class Feeder(torch.utils.data.Dataset):
             SelectPair.exp_name == exp_name,
             SelectPair.done == True
         ).all()
-        self.label = [0 if pair.first_selection > pair.sec_selection else 1 for pair in selected_pairs]
+        self.label = [1 if pair.first_selection > pair.sec_selection else 0 for pair in selected_pairs]
         pairs = [(pair.first, pair.second) for pair in selected_pairs]
         self.pairs = [
             (
@@ -110,3 +107,44 @@ class Feeder(torch.utils.data.Dataset):
             ) for pair in pairs
         ]
  
+
+class DatasetFeeder(Feeder):
+    def __init__(self,
+                 data_path,
+                 label_path,
+                 random_choose=False,
+                 random_move=False,
+                 window_size=-1,
+                 debug=False,
+                 mmap=True):
+        self.debug = debug
+        self.data_path = data_path
+        self.label_path = label_path
+        self.random_choose = random_choose
+        self.random_move = random_move
+        self.window_size = window_size
+
+        self.load_data(mmap)
+        self.load_label()
+
+    def load_label(self):
+        with open(self.label_path, 'rb') as f:
+            self.sample_name, self.label = pickle.load(f)
+
+    def __len__(self):
+        return self.N
+
+    def __getitem__(self, index):
+        # get data
+        data = self.data[index]
+        name = self.sample_name[index]
+        
+        # processing
+        if self.random_choose:
+            data = tools.random_choose(data, self.window_size)
+        elif self.window_size > 0:
+            data = tools.auto_pading(data, self.window_size)
+        if self.random_move:
+            data = tools.random_move(data)
+
+        return data, name
