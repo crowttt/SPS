@@ -6,3 +6,4 @@ torch
 torchvision
 sqlalchemy
 psycopg2-binary
+loguru

@@ -131,3 +131,5 @@ dmypy.json
 
 # dataset
 data/*
+# pretrain model
+pretrain/*
