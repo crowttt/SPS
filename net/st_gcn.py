@@ -85,7 +85,7 @@ class Model(nn.Module):
         x = x.view(N, M, -1, 1, 1).mean(dim=1)
 
         x = self.fcn(x)
-        x = self.relu(x)
+        # x = self.relu(x)
         x = x.view(x.size(0), -1)
 
         return x

@@ -1,5 +1,4 @@
 # sys
-import os
 import sys
 import numpy as np
 import random
@@ -18,6 +17,10 @@ from . import tools
 # db
 from db.session import session
 from db.model import SelectPair, Kinetics
+
+# log
+from loguru import logger
+
 
 class Feeder(torch.utils.data.Dataset):
     """ Feeder for skeleton-based action recognition
@@ -47,8 +50,12 @@ class Feeder(torch.utils.data.Dataset):
         self.window_size = window_size
         self.exp_name = exp_name
 
+        logger.info('Loading all dataset')
         self.load_data(mmap)
+        logger.info('Done')
+        logger.info('Load label history')
         self.history()
+        logger.info('Done')
 
     def load_data(self, mmap):
         # data: N C V T M
@@ -72,14 +79,13 @@ class Feeder(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.label)
 
+
     def __getitem__(self, index):
         # get data
-        pair = self.pairs[index]
-
-        data_pair_first = np.array(self.data[pair[0]])
-        data_pair_sec = np.array(self.data[pair[1]])
+        data_pair_first = self.data[index][0]
+        data_pair_sec = self.data[index][1]
         label = self.label[index]
-        
+
         # processing
         if self.random_choose:
             data_pair_first = tools.random_choose(data_pair_first, self.window_size)
@@ -90,23 +96,57 @@ class Feeder(torch.utils.data.Dataset):
         if self.random_move:
             data_pair_first = tools.random_move(data_pair_first)
             data_pair_sec = tools.random_move(data_pair_sec)
-
-        return data_pair_first, data_pair_sec, label
+        data = torch.stack((torch.tensor(data_pair_first), torch.tensor(data_pair_sec)), dim=0)
+        return data, label
 
     def history(self):
         selected_pairs = session.query(SelectPair).filter(
-            SelectPair.exp_name == exp_name,
+            SelectPair.exp_name == self.exp_name,
             SelectPair.done == True
         ).all()
         self.label = [1 if pair.first_selection > pair.sec_selection else 0 for pair in selected_pairs]
         pairs = [(pair.first, pair.second) for pair in selected_pairs]
-        self.pairs = [
-            (
-                session.query(Kinetics.index).filter(Kinetics.name == pair[0]).first(),
-                session.query(Kinetics.index).filter(Kinetics.name == pair[1]).first(),
-            ) for pair in pairs
-        ]
- 
+
+        ######################################
+        # adfsfa = [
+        #     (
+        #         session.query(Kinetics).get(pair[0]).index,
+        #         session.query(Kinetics).get(pair[1]).index
+        #     ) for pair in pairs
+        # ]
+        # adfsfa = list(filter(lambda x : x[0] and x[1] , adfsfa))
+        ######################################
+        pairs_first = [pair[0] for pair in pairs]
+        pairs_second = [pair[1] for pair in pairs]
+        first_kinetics = session.query(Kinetics).filter(Kinetics.name.in_(pairs_first)).all()
+        second_kinetics = session.query(Kinetics).filter(Kinetics.name.in_(pairs_second)).all()
+        first_kinetics = [next(q for q in first_kinetics if q.name == name) for name in pairs_first]
+        second_kinetics = [next(q for q in second_kinetics if q.name == name) for name in pairs_second]
+
+        if [kinetics.name for kinetics in first_kinetics] == pairs_first:
+            print('Ok')
+        if [kinetics.name for kinetics in second_kinetics] == pairs_second:
+            print('Ok')
+
+        first_kinetics = [kinetics.index for kinetics in first_kinetics]
+        second_kinetics = [kinetics.index for kinetics in second_kinetics]
+
+        # 權宜之計
+        # first_kinetics_tmp = []
+        # second_kinetics_tmp = []
+        # for i in range(len(first_kinetics)):
+        #     if first_kinetics[i].has_skeleton and second_kinetics[i].has_skeleton:
+        #         first_kinetics_tmp.append(first_kinetics[i].index)
+        #         second_kinetics_tmp.append(second_kinetics[i].index)
+        # first_kinetics = first_kinetics_tmp
+        # second_kinetics = second_kinetics_tmp
+        # self.label = self.label[: len(second_kinetics)]
+
+        # extract labeled data from total dataset
+        self.data_pairs_first = self.data[first_kinetics]
+        self.data_pairs_sec = self.data[second_kinetics]
+        self.data = [(data_pair_first, data_pair_sec) for data_pair_first, data_pair_sec in zip(self.data_pairs_first, self.data_pairs_sec)]
+
 
 class DatasetFeeder(Feeder):
     def __init__(self,
@@ -136,7 +176,7 @@ class DatasetFeeder(Feeder):
 
     def __getitem__(self, index):
         # get data
-        data = self.data[index]
+        data = np.array(self.data[index])
         name = self.sample_name[index]
         
         # processing

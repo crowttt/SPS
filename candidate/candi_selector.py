@@ -1,5 +1,9 @@
+import sys
+import torch
+import torch.nn as nn 
+from tqdm import tqdm
 from net.st_gcn import Model
-from utils import Base
+from utils import Base, ngpu
 from feeder.ranknet import Feeder, DatasetFeeder
 
 
@@ -26,37 +30,55 @@ class Candidate(Base):
                 dataset=Feeder(self.arg.process['exp_name'], **self.arg.ranknet_feeder_args),
                 batch_size=self.arg.ranknet_train_arg['batch_size'],
                 shuffle=True,
-                num_workers=self.arg.num_worker * ngpu(
-                    self.arg.device),
+                num_workers=self.arg.num_worker * self.ngpus,
                 drop_last=True
             )
 
             self.unlabel_data_loader = torch.utils.data.DataLoader(
                 dataset=DatasetFeeder(**self.arg.ranknet_feeder_args),
                 batch_size=self.arg.ranknet_train_arg['batch_size'],
-                shuffle=False,
-                num_workers=self.arg.num_worker * ngpu(
-                    self.arg.device),
+                shuffle=True,
+                num_workers=self.arg.num_worker * self.ngpus,
                 drop_last=True
             )
     
     def load_model(self):
         self.model = Model(**(self.arg.ranknet_args))
         self.model.apply(weights_init)
+        self.model = self.model.to(self.device)
+        # if self.ngpus > 1:
+        #     self.model = nn.DataParallel(self.model, device_ids=self.gpus)
         self.loss_func = torch.nn.BCELoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.arg.ranknet_train_arg['base_lr'])
 
     def train(self):
-        for _ in range(self.arg.ranknet_train_arg['num_epoch']):
-            for input1, input2, y in self.data_loader:
+        min_loss = sys.float_info.max
+        for i in range(self.arg.ranknet_train_arg['num_epoch']):
+            pbar = tqdm(self.data_loader)
+            total_loss = 0.0
+            self.model.train()
+            for _, (data, y) in enumerate(pbar):
+                data = torch.split(data, 1, dim=1)
+                if torch.cuda.is_available():
+                    input1 = torch.squeeze(data[0], dim=1).float().to(self.device)
+                    input2 = torch.squeeze(data[1], dim=1).float().to(self.device)
+                    y = y.float().to(self.device)
+
                 score1 = self.model(input1)
                 score2 = self.model(input2)
-                y_pred = torch.sigmoid(score1 - score2)
-
+                y_pred = torch.squeeze(torch.sigmoid(score1 - score2), dim=1)
                 self.optimizer.zero_grad()
                 loss = self.loss_func(y_pred, y)
                 loss.backward()
                 self.optimizer.step()
+                total_loss += loss.item()
+
+            print("Training: ", i, " traing loss: ", total_loss / len(self.data_loader))
+            if total_loss / len(self.data_loader) <= min_loss:
+                min_loss = total_loss / len(self.data_loader)
+                torch.save({ 
+                    'model_state_dict': self.model.state_dict(), 
+                    'optimizer_state_dict': self.optimizer.state_dict()}, 'pretrain/ranknet/ranknet.pt')
 
     def ranker(self):
         self.rank = []
@@ -69,5 +91,5 @@ class Candidate(Base):
     def candidate(self, k):
         top_k = self.rank[:k]
         last_k = self.rank[-k:]
-        res = [[i[0], j[0]] for i in top_k for j in last_k]
+        res = [(i[0], j[0]) for i in top_k for j in last_k]
         return res

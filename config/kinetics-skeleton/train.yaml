@@ -6,8 +6,8 @@ ranknet_feeder_args:
   random_choose: True
   random_move: True
   window_size: 150 
-  data_path: ./data/Kinetics/kinetics-skeleton/train_data.npy
-  label_path: ./data/Kinetics/kinetics-skeleton/train_label.pkl
+  data_path: ./data/Kinetics/train_data.npy
+  label_path: ./data/Kinetics/train_label.pkl
 
 
 # ranknet model
@@ -22,15 +22,15 @@ ranknet_args:
 # ranknet train
 ranknet_train_arg:
   batch_size: 4
-  base_lr: 0.01
-  num_epoch: 100
+  base_lr: 0.001
+  num_epoch: 1000
 
 
 process:
   exp_name: 'first_exp'
   round: 50
-  person: 10
-  pair_batch_size: 10
+  person_per_batch: 1
+  pair_batch_size: 100
   
 device: [0,1,2,3]
 num_worker: 4
