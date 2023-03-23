@@ -28,16 +28,16 @@ class Process:
                 
     def get_candidate(self):
         self.candidate.load_data()
-        # self.candidate.load_model()
+        logger.info(f'Start to train ranker')
         self.candidate.train()
+        logger.info(f'Ranking all kinetics data')
         self.candidate.ranker()
-        return self.candidate.candidate()
+        return self.candidate.candidate(self.config.process['pair_batch_size'])
 
 
     def picker(self, candidate_pool):
         num_to_select = self.config.process['pair_batch_size']
         sample_to_push = random.sample(candidate_pool, num_to_select)
 
-        store_sample(config, sample_to_push, self.current_round)
-        dispatch(config, self.current_round)
-
+        store_sample(self.config, sample_to_push, self.current_round)
+        dispatch(self.config, self.current_round)

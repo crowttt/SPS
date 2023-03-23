@@ -36,7 +36,7 @@ class Candidate(Base):
 
             self.unlabel_data_loader = torch.utils.data.DataLoader(
                 dataset=DatasetFeeder(**self.arg.ranknet_feeder_args),
-                batch_size=self.arg.ranknet_train_arg['batch_size'],
+                batch_size=self.arg.ranknet_train_arg['batch_size'] * 16,
                 shuffle=True,
                 num_workers=self.arg.num_worker * self.ngpus,
                 drop_last=True
@@ -82,7 +82,16 @@ class Candidate(Base):
 
     def ranker(self):
         self.rank = []
-        for data, name in self.unlabel_data_loader:
+        pbar = tqdm(self.unlabel_data_loader)
+        pre_model = torch.load(self.arg.pretrained['ranknet'])
+        self.model.load_state_dict(pre_model['model_state_dict'])
+        self.model = self.model.to(self.device)
+        if self.ngpus > 1:
+            self.model = nn.DataParallel(self.model, device_ids=self.gpus)
+        # for data, name in self.unlabel_data_loader:
+        for _, (data, name) in enumerate(pbar):
+            if torch.cuda.is_available():
+                data = data.float().to(self.device)
             score = self.model(data)
             self.rank = self.rank + [(n,float(s)) for n,s in zip(name,score)]
         self.rank = sorted(self.rank, key=lambda x: x[1])

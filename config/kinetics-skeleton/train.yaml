@@ -31,6 +31,9 @@ process:
   round: 50
   person_per_batch: 1
   pair_batch_size: 100
-  
+
+pretrained:
+  ranknet: './pretrain/ranknet/ranknet.pt'
+
 device: [0,1,2,3]
 num_worker: 4
