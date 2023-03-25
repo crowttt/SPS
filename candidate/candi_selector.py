@@ -77,7 +77,7 @@ class Candidate(Base):
             if total_loss / len(self.data_loader) <= min_loss:
                 min_loss = total_loss / len(self.data_loader)
                 torch.save({ 
-                    'model_state_dict': self.model.state_dict(), 
+                    'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict()}, 'pretrain/ranknet/ranknet.pt')
 
     def ranker(self):
@@ -100,5 +100,12 @@ class Candidate(Base):
     def candidate(self, k):
         top_k = self.rank[:k]
         last_k = self.rank[-k:]
-        res = [(i[0], j[0]) for i in top_k for j in last_k]
+        permutation = [(i[0], j[0]) for i in top_k for j in last_k]
+
+        res = []
+        for i in k:
+            candi = random.sample(permutation, 20)
+            permutation = list(set(permutation) - set(candi))
+            res.append(candi)
+
         return res

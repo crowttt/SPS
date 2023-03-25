@@ -1,7 +1,8 @@
 import time
 import random
 from candidate.candi_selector import Candidate
-from utils import load_arg, init_sample, next_round, store_sample
+from dqn.dqn import DQN
+from utils import load_arg, init_sample, next_round, store_action
 from loguru import logger
 
 from db.session import session
@@ -17,15 +18,31 @@ class Process:
         logger.info('[INIT SAMPLE] Generate intialized sample')
         self.candidate = Candidate(self.config)
         logger.info('[CANDIDATE] Initialize candidate generate')
+        self.dqn = DQN(self.config)
+        logger.info('[DQN] Initialize deep Q-learning model')
+
+        self.current_round = next_round(self.config)
+        logger.info(f'[ROUND] {self.current_round}th round')
+
 
     def start(self):
         while self.current_round < int(self.config.process['round']):
-            logger.info(f'[ROUND] {self.current_round}th round')
-            self.current_round = next_round(self.config)
+            if self.current_round == 1:
+                self.dqn.initialize()
             candidate_pool = self.get_candidate()
             logger.info(f'[CANDIDATE POOL] Generate candidate pool')
-            self.picker(candidate_pool)
-                
+
+            actions = self.choose_action(candidate_pool)
+            logger.info(f'[ACTION] Choose actions from candidate pool')
+
+            next_round = next_round(self.config)
+            logger.info(f'[NEXT ROUND] Next round is {self.current_round}th round')
+
+            self.dqn.update_memory(actions, candidate_pool, self.current_round)
+            self.dqn.learn()
+            self.current_round = next_round
+
+
     def get_candidate(self):
         self.candidate.load_data()
         logger.info(f'Start to train ranker')
@@ -35,9 +52,15 @@ class Process:
         return self.candidate.candidate(self.config.process['pair_batch_size'])
 
 
-    def picker(self, candidate_pool):
+    def choose_action(self, candidate_pool, random_mode=False):
         num_to_select = self.config.process['pair_batch_size']
-        sample_to_push = random.sample(candidate_pool, num_to_select)
 
-        store_sample(self.config, sample_to_push, self.current_round)
+        if random_mode:
+            action = [random.choice(candi) for candi in candidate_pool]
+        else:
+            actions = dqn.choose_action()
+
+        store_action(self.config, action, self.current_round)
         dispatch(self.config, self.current_round)
+
+        return action
