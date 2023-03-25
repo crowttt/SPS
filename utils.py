@@ -118,7 +118,7 @@ def next_round(config):
     return current_round + 1
 
 
-def store_sample(config, sample_pair, curr_round=0):
+def store_action(config, sample_pair, curr_round=0):
     for pair in sample_pair:
         select_pair = SelectPair(
             pair_id=str(uuid.uuid4()),

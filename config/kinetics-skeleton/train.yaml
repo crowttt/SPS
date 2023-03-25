@@ -28,9 +28,9 @@ ranknet_train_arg:
 
 process:
   exp_name: 'first_exp'
-  round: 50
+  round: 100
   person_per_batch: 1
-  pair_batch_size: 100
+  pair_batch_size: 50
 
 pretrained:
   ranknet: './pretrain/ranknet/ranknet.pt'
