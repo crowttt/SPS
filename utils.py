@@ -10,7 +10,7 @@ import requests
 import torch
 from sqlalchemy import func
 
-from db.model import SelectPair, questionnaire, Users, Kinetics
+from db.model import SelectPair, Kinetics
 from db.session import session
 
 
@@ -73,9 +73,9 @@ def init_sample(config):
     sample_pair = list(set([tuple(sorted(pair)) for pair in sample_pair]))
     sample_pair = list(filter(lambda x: x[0] is not x[1], sample_pair))
     random.shuffle(sample_pair)
-    sample_pair = sample_pair[:int(config.process['pair_batch_size'])]
+    sample_pair = sample_pair[:config.process['pair_batch_size']]
 
-    store_sample(config, sample_pair)
+    store_action(config, sample_pair)
 
     dispatch(config)
 

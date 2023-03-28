@@ -2,7 +2,7 @@ import time
 import random
 from candidate.candi_selector import Candidate
 from dqn.dqn import DQN
-from utils import load_arg, init_sample, next_round, store_action
+from utils import load_arg, init_sample, next_round, store_action, dispatch
 from loguru import logger
 
 from db.session import session
@@ -39,7 +39,8 @@ class Process:
             logger.info(f'[NEXT ROUND] Next round is {self.current_round}th round')
 
             self.dqn.update_memory(actions, candidate_pool, self.current_round)
-            self.dqn.learn()
+            for itr in range(self.config.process['update_times']):
+                self.dqn.learn()
             self.current_round = next_round
 
 
@@ -53,14 +54,12 @@ class Process:
 
 
     def choose_action(self, candidate_pool, random_mode=False):
-        num_to_select = self.config.process['pair_batch_size']
-
         if random_mode:
-            action = [random.choice(candi) for candi in candidate_pool]
+            actions = [random.choice(candi) for candi in candidate_pool]
         else:
-            actions = dqn.choose_action()
+            actions = self.dqn.choose_action(candidate_pool)
 
-        store_action(self.config, action, self.current_round)
+        store_action(self.config, actions, self.current_round)
         dispatch(self.config, self.current_round)
 
-        return action
+        return actions
