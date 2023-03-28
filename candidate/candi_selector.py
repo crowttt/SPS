@@ -1,4 +1,5 @@
 import sys
+import random
 import torch
 import torch.nn as nn 
 from tqdm import tqdm
@@ -104,7 +105,7 @@ class Candidate(Base):
 
         res = []
         for i in k:
-            candi = random.sample(permutation, 20)
+            candi = random.sample(permutation, self.arg.process['candi_num'])
             permutation = list(set(permutation) - set(candi))
             res.append(candi)
 

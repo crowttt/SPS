@@ -25,15 +25,39 @@ ranknet_train_arg:
   base_lr: 0.001
   num_epoch: 1000
 
+# stgec embed
+embed_model: net.stgcn_embed.Model
+embed_args:
+  in_channels: 3
+  out_channels: 400
+  edge_importance_weighting: True
+  graph_args:
+    layout: 'openpose'
+    strategy: 'spatial'
+
+# qnet
+dqn_model: net.qnet.QNet
+dqn_args:
+  memory_size: 500
+  batch_size: 50
+  double_q: True
+  gamma: 0.7
+  tau: 0.01
+  learning_rate: 0.001
+  l2_norm: 0.001
+
 
 process:
   exp_name: 'first_exp'
   round: 100
   person_per_batch: 1
   pair_batch_size: 50
+  candi_num: 20
+  update_times: 500
 
 pretrained:
   ranknet: './pretrain/ranknet/ranknet.pt'
+  embed: './pretrain/dqn/embed.pt'
 
 device: [0,1,2,3]
 num_worker: 4

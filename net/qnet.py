@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class QNet(nn.Module):
-    def __init__(self, candi_num, emb_size, x_dim=50, state_dim=50, hidden_dim=50, layer_num=1):
+    def __init__(self, candi_num, emb_size, x_dim=800, state_dim=800, hidden_dim=800, layer_num=1):
         super(QNet, self).__init__()
         #self.duling = duling
         self.candi_num = candi_num
