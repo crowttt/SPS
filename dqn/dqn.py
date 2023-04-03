@@ -1,16 +1,19 @@
 import random
 from collections import namedtuple
-import itertools
 
 import torch
 import torch.nn as nn
 import numpy as np
 import torch.optim as optim
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
+from sqlalchemy import func, or_
 
 from db.session import session
 from db.model import SelectPair, Kinetics
 from net.qnet import QNet as Net
 from net.stgcn_embed import Model
+from utils import visible_gpu, ngpu
+from config import REDIS_ENGINE
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'next_state', 'next_candi'))
 
@@ -22,12 +25,17 @@ class Memory:
     def push(self, transition: tuple):
         if len(self.memory) < self.capacity:
             self.memory.append(Transition(*transition))
-            return True
         else:
-            return False
+            self.memory = self.memory[1:]
 
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
+
+    def all(self):
+        return self.memory
+
+    def load(self, data):
+        self.memory = data
 
     def __len__(self):
         return len(self.memory)
@@ -36,101 +44,112 @@ class Memory:
 class DQN(object):
     def __init__(self, config):
         self.config = config
-        self.eval_net = Net(candi_num=config.process['candi_num'], emb_size=config.process['out_channels']*2)
-        self.target_net = Net(candi_num=config.process['candi_num'], emb_size=config.process['out_channels']*2)
+        self.eval_net = Net(candi_num=config.process['candi_num'], emb_size=config.embed_args['out_channels']*2)
+        self.target_net = Net(candi_num=config.process['candi_num'], emb_size=config.embed_args['out_channels']*2)
         self.experience = set()
-        self.memory = Memory(config.memory_size)
+        self.memory = Memory(config.dqn_args['memory_size'])
         self.state = []
         self.last_transition = None
         self.double_q = config.dqn_args['double_q']
         self.gamma = config.dqn_args['gamma']
         self.tau = config.dqn_args['tau']
         self.embeddor = Model(**(config.embed_args))
-        self.optimizer = optim.Adam(itertools.chain(self.eval_net.parameters(),self.gcn_net.parameters()), lr=config.dqn_args['learning_rate'], weight_decay = config.dqn_args['l2_norm'])
+        self.optimizer = optim.Adam(self.eval_net.parameters(), lr=config.dqn_args['learning_rate'], weight_decay = config.dqn_args['l2_norm'])
         self.loss_func = nn.MSELoss()
+        self.data_path = config.data['data_path']
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.gpus = visible_gpu(config.device)
+        self.ngpus = ngpu(config.device)
         if torch.cuda.is_available():
-            self.embeddor.to(torch.device('cuda'))
+            self.eval_net.to(self.device)
+            self.target_net.to(self.device)
+            self.embeddor.to(self.device)
             self.embeddor.load_state_dict(torch.load(config.pretrained['embed']))
-
+        if self.ngpus > 1:
+            self.embeddor = nn.DataParallel(self.embeddor, device_ids=self.gpus)
+            self.eval_net = nn.DataParallel(self.eval_net, device_ids=self.gpus)
+            self.target_net = nn.DataParallel(self.target_net, device_ids=self.gpus)
         self.load_data()
 
 
     def initialize(self):
+        current_round = session.query(func.max(SelectPair.round_num)).scalar()
         select_pair = session.query(SelectPair).filter(
             SelectPair.exp_name == self.config.process['exp_name'],
-            SelectPair.round_num == 0
+            SelectPair.round_num == current_round,
+            or_(SelectPair.first_selection > SelectPair.none_selection,
+            SelectPair.sec_selection > SelectPair.none_selection)
         ).all()
 
-        self.cur_state = [(pair.first, pair.second) for pair in select_pair]
-        # for pair in select_pair:
-            # label_list = [pair.first_selection, pair.sec_selection, pair.none_selection]
-            # self.cur_state.append((pair.first, pair.second, label_list.index(max(label_list))))
+        self.curr_state = [(pair.first, pair.second) for pair in select_pair]
+
+
+    def prepare_embedded(self, data, batch_size):
+        first = [s[0] for s in data]
+        second = [s[1] for s in data]
+        first_idx = session.query(Kinetics.index, Kinetics.name).filter(Kinetics.name.in_(first)).all()
+        second_idx = session.query(Kinetics.index, Kinetics.name).filter(Kinetics.name.in_(second)).all()
+        first_idx = [next(q[0] for q in first_idx if q.name == name) for name in first]
+        second_idx = [next(q[0] for q in second_idx if q.name == name) for name in second]
+        data = [np.array((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
+
+        data = [data[i:i+batch_size] for i in range(0, len(data), batch_size)]
+        data_batch = []
+        self.embeddor.eval()
+        for batch in data:
+            batch = np.concatenate(batch, axis=0)
+            with torch.no_grad():
+                batch = self.embeddor(torch.tensor(batch).float().to(self.device))
+            batch = list(torch.split(batch, 2))
+            batch = [d.view(-1) for d in batch]
+            batch = torch.stack(batch)
+            data_batch.append(batch)
+        emb = torch.cat(data_batch)
+        return emb # tensor
 
 
     def choose_action(self, candi_pool):
-        self.state = [self.curr_state]
+        self.initialize()
         actions = []
+        self.eval_net.eval()
         for candi in candi_pool:
-            first = [c[0] for c in candi]
-            second = [c[1] for c in candi]
-            first_idx = session.query(Kinetics.index).filter(Kinetics.name.in_(first)).all()
-            second_idx = session.query(Kinetics.index).filter(Kinetics.name.in_(second)).all()
-            first_idx = [next(q[0] for q in first_idx if q.name == name) for name in first]
-            second_idx = [next(q[0] for q in second_idx if q.name == name) for name in second]
-            candi_data = [np.array((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
-            candi_emb = [self.embeddor(torch.tensor(d)) for d in candi_data]
-            candi_emb = [d.view(-1) for d in candi_emb]
-            candi_emb = torch.stack(candi_emb)
+            candi_emb = self.prepare_embedded(candi, len(candi))
             candi_emb = torch.unsqueeze(candi_emb, 0)
 
-            curr_state = self.state[-1]
-            first = [s[0] for s in curr_state]
-            second = [s[1] for s in curr_state]
-            first_idx = session.query(Kinetics.index).filter(Kinetics.name.in_(first)).all()
-            second_idx = session.query(Kinetics.index).filter(Kinetics.name.in_(second)).all()
-            first_idx = [next(q[0] for q in first_idx if q.name == name) for name in first]
-            second_idx = [next(q[0] for q in second_idx if q.name == name) for name in second]
-            state_data = [np.array((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
-            state_emb = [self.embeddor(torch.tensor(d)) for d in state_data]
-            state_emb = [d.view(-1) for d in state_emb]
-            state_emb = torch.stack(state_emb)
+            state_emb = self.prepare_embedded(self.curr_state, 128)
             state_emb = torch.unsqueeze(state_emb, 0)
 
-            actions_value = self.eval_net(state_emb, candi_emb)
+            with torch.no_grad():
+                actions_value = self.eval_net(state_emb, candi_emb)
             action = candi[actions_value.argmax().item()]
-            self.state.append(curr_state + [action])
             actions.append(action)
-        self.curr_state = self.state[-1]
         return actions
 
 
     def update_memory(self, actions, candi_pool, round_num):
-        candi_pool = {action: candi for action, candi in zip(actions, candi_pool)}
+        self.initialize()
         results = session.query(SelectPair).filter(
             SelectPair.exp_name == self.config.process['exp_name'],
             SelectPair.round_num == round_num
         ).all()
         results = [next(r for r in results if r.first == action[0] and r.second == action[1]) for action in actions]
 
-        for i in len(results):
-            if self.last_transition and i is 0:
+        for i in range(len(results)):
+            if self.last_transition and i == 0:
                 candi = candi_pool[i]
                 first_transition = self.last_transition + (candi,)
                 self.memory.push(first_transition)
 
             action = actions[i]
             label_list = [results[i].first_selection, results[i].sec_selection, results[i].none_selection]
-            reward = label_list.index(max(label_list))
-            # new_stat = self.curr_state + [action]
+            reward = [1,0.5,-1][label_list.index(max(label_list))]
 
             if i is len(results) - 1:
-                # self.transition = (self.curr_state, action, reward, new_stat)
-                self.transition = (self.state[i], action, reward, self.state[i+1])
+                self.transition = (self.curr_state, action, reward, self.curr_state + [action])
             else:
                 candi = candi_pool[i+1]
-                # self.memory.push((self.curr_state, action, reward, new_stat, candi))
-                self.memory.push((self.state[i], action, reward, self.state[i+1], candi))
-            # self.curr_state = new_stat
+                self.memory.push((self.curr_state, action, reward, self.curr_state + [action], candi))
+            self.curr_state = self.curr_state + [action]
 
 
     def mem_full(self):
@@ -144,42 +163,40 @@ class DQN(object):
             self.data = np.load(self.data_path)
 
 
-    def learn(self):
+    def learn(self, iter):
+        self.eval_net.train()
         for target_param, param in zip(self.target_net.parameters(), self.eval_net.parameters()):
             target_param.data.copy_(self.tau * param.data + target_param.data * (1.0 - self.tau))
 
-        self.config.dqn_args['batch_size']
+        batch_size = self.config.dqn_args['batch_size']
 
         transitions = self.memory.sample(self.config.dqn_args['batch_size'])
         batch = Transition(*zip(*transitions))
 
-        # state 和 next_state 都是所選物件的 sequence 
-        # self.gcn_net 算的是一個 seqnence 的 embedding vector
-        b_s = self.gcn_net(list(batch.state))       #[N*max_node*emb_dim]
-        b_s_ = self.gcn_net(list(batch.next_state))
+        lengths_b_s = torch.tensor([len(state) for state in list(batch.state)], dtype=torch.int64)
+        b_s = pad_sequence([self.prepare_embedded(state, batch_size) for state in list(batch.state)], batch_first=True)
 
-        # self.gcn_net.embedding 是一個 nn.Embedding
-        b_a = torch.LongTensor(np.array(batch.action).reshape(-1, 1))  #[N*1]
-        b_a_emb =self.gcn_net.embedding(b_a)       #[N*1*emb_dim]
+        lengths_b_s_ = torch.tensor([len(state) for state in list(batch.next_state)], dtype=torch.int64)
+        b_s_ = pad_sequence([self.prepare_embedded(state, batch_size) for state in list(batch.next_state)], batch_first=True)
+
+        b_a_emb = torch.stack([self.prepare_embedded([action], 1) for action in list(batch.action)])
 
         # reward
-        b_r = torch.FloatTensor(np.array(batch.reward).reshape(-1, 1))
+        b_r = torch.FloatTensor(np.array(batch.reward).reshape(-1, 1)).to(self.device)
 
-        # 產生 candi_emb，算 target net 的時候要用
-        next_candi = torch.LongTensor(list(batch.next_candi))
-        next_candi_emb = self.gcn_net.embedding(next_candi)    #[N*k*emb_dim]
-
-        q_eval = self.eval_net(b_s, b_a_emb,choose_action=False)
+        next_candi_emb = torch.stack([self.prepare_embedded(candi, len(candi)) for candi in list(batch.next_candi)])
+        q_eval = self.eval_net(b_s, b_a_emb, lengths_b_s , choose_action=False)
 
 
         if self.double_q:
-            best_actions = torch.gather(input=next_candi, dim=1, index=self.eval_net(b_s_,next_candi_emb).argmax(dim=1).view(self.batch_size,1))
-            best_actions_emb = self.gcn_net.embedding(best_actions)
-            q_target = b_r + self.gamma *( self.target_net(b_s_,best_actions_emb,choose_action=False).detach())
+            index = self.eval_net(b_s_,next_candi_emb, lengths_b_s_).argmax(dim=1)
+            best_actions_emb = next_candi_emb[torch.arange(next_candi_emb.size(0)), index, :]
+            best_actions_emb = torch.unsqueeze(best_actions_emb, 1)
+            q_target = b_r + self.gamma *( self.target_net(b_s_,best_actions_emb, lengths_b_s_,choose_action=False).detach())
         else:
-            q_target = b_r + self.gamma*((self.target_net(b_s_,next_candi_emb).detach()).max(dim=1).view(self.batch_size,1))
+            q_target = b_r + self.gamma*((self.target_net(b_s_,next_candi_emb,lengths_b_s_).detach()).max(dim=1).view(self.batch_size,1))
         loss = self.loss_func(q_eval, q_target)
-
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        print(f'loss: {loss.item()}')

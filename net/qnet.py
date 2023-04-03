@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence
 
 
 class QNet(nn.Module):
@@ -18,7 +19,7 @@ class QNet(nn.Module):
         self.out_advantage = nn.Linear(hidden_dim,1)
 
 
-    def forward(self, x,y, choose_action = True):
+    def forward(self, x,y,lengths_x=None, choose_action = True):
         """
         L:32
         D:50
@@ -26,6 +27,9 @@ class QNet(nn.Module):
         :param x: encode history [N*L*D]; y: action embedding [N*K*D]
         :return: v: action score [N*K]
         """
+        if lengths_x is not None:
+            x = pack_padded_sequence(x, lengths_x.to('cpu'), batch_first=True, enforce_sorted=False)
+        self.rnn.flatten_parameters()
         out, h = self.rnn(x)
         h = h.permute(1,0,2) #[N*1*D]
         x = F.relu(self.fc1(h))
@@ -33,7 +37,7 @@ class QNet(nn.Module):
         value = self.out_value(F.relu(self.fc2_value(x))).squeeze(dim=2) #[N*1*1]
         #Q(s,a)
         if choose_action:
-            x = x.repeat(1,self.candi_num,1) # candi 中每個 action 都配一個 state, 這裡的 state 已經完成 rnn embeding，所以 shape 是 [N,1,D]
+            x = x.repeat(1,self.candi_num,1)
         state_cat_action = torch.cat((x,y),dim=2)
         advantage = self.out_advantage(F.relu(self.fc2_advantage(state_cat_action))).squeeze(dim=2) #[N*K]
 
