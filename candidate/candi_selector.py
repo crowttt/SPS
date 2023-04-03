@@ -1,5 +1,6 @@
 import sys
 import random
+import pickle
 import torch
 import torch.nn as nn 
 from tqdm import tqdm
@@ -37,7 +38,7 @@ class Candidate(Base):
 
             self.unlabel_data_loader = torch.utils.data.DataLoader(
                 dataset=DatasetFeeder(**self.arg.ranknet_feeder_args),
-                batch_size=self.arg.ranknet_train_arg['batch_size'] * 16,
+                batch_size=self.arg.ranknet_train_arg['batch_size'] * 32,
                 shuffle=True,
                 num_workers=self.arg.num_worker * self.ngpus,
                 drop_last=True
@@ -47,8 +48,8 @@ class Candidate(Base):
         self.model = Model(**(self.arg.ranknet_args))
         self.model.apply(weights_init)
         self.model = self.model.to(self.device)
-        # if self.ngpus > 1:
-        #     self.model = nn.DataParallel(self.model, device_ids=self.gpus)
+        if self.ngpus > 1:
+            self.model = nn.DataParallel(self.model, device_ids=self.gpus)
         self.loss_func = torch.nn.BCELoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.arg.ranknet_train_arg['base_lr'])
 
@@ -84,27 +85,33 @@ class Candidate(Base):
     def ranker(self):
         self.rank = []
         pbar = tqdm(self.unlabel_data_loader)
+        self.model = Model(**(self.arg.ranknet_args))
         pre_model = torch.load(self.arg.pretrained['ranknet'])
-        self.model.load_state_dict(pre_model['model_state_dict'])
+        self.model.load_state_dict(pre_model['model_state_dict'], False)
         self.model = self.model.to(self.device)
         if self.ngpus > 1:
             self.model = nn.DataParallel(self.model, device_ids=self.gpus)
-        # for data, name in self.unlabel_data_loader:
+        self.model.eval()
         for _, (data, name) in enumerate(pbar):
-            if torch.cuda.is_available():
-                data = data.float().to(self.device)
-            score = self.model(data)
+            with torch.no_grad():
+                if torch.cuda.is_available():
+                    data = data.float().to(self.device)
+                score = self.model(data)
             self.rank = self.rank + [(n,float(s)) for n,s in zip(name,score)]
         self.rank = sorted(self.rank, key=lambda x: x[1])
+        self.rank = [x[0] for x in self.rank]
+        # with open('./data/Kinetics/train_label.pkl', 'rb') as f:
+        #     self.rank, _ = pickle.load(f)
+        # self.rank = [x[:-5] for x in self.rank]
 
 
     def candidate(self, k):
         top_k = self.rank[:k]
         last_k = self.rank[-k:]
-        permutation = [(i[0], j[0]) for i in top_k for j in last_k]
+        permutation = [(i, j) for i in top_k for j in last_k]
 
         res = []
-        for i in k:
+        for i in range(k):
             candi = random.sample(permutation, self.arg.process['candi_num'])
             permutation = list(set(permutation) - set(candi))
             res.append(candi)

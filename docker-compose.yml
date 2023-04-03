@@ -1,0 +1,17 @@
+version: '3.3'
+
+services:
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    ports:
+      - 6379:6379
+    command: redis-server --appendonly yes --requirepass password
+    volumes:
+      - certpod-redis-data:/data
+
+
+volumes:
+  certpod-redis-data:

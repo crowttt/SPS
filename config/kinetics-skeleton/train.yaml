@@ -21,9 +21,9 @@ ranknet_args:
 
 # ranknet train
 ranknet_train_arg:
-  batch_size: 4
+  batch_size: 32
   base_lr: 0.001
-  num_epoch: 1000
+  num_epoch: 500
 
 # stgec embed
 embed_model: net.stgcn_embed.Model
@@ -49,11 +49,15 @@ dqn_args:
 
 process:
   exp_name: 'first_exp'
-  round: 100
+  round: 50
   person_per_batch: 1
-  pair_batch_size: 50
+  pair_batch_size: 100
   candi_num: 20
   update_times: 500
+
+data:
+  data_path: ./data/Kinetics/train_data.npy
+  label_path: ./data/Kinetics/train_label.pkl
 
 pretrained:
   ranknet: './pretrain/ranknet/ranknet.pt'

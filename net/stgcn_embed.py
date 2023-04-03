@@ -11,7 +11,7 @@ class Model(nn.Module):
 
     Args:
         in_channels (int): Number of channels in the input data
-        num_class (int): Number of classes for the classification task
+        out_channels (int): Number of classes for the classification task
         graph_args (dict): The arguments for building the graph
         edge_importance_weighting (bool): If ``True``, adds a learnable
             importance weighting to the edges of the graph
@@ -19,14 +19,14 @@ class Model(nn.Module):
 
     Shape:
         - Input: :math:`(N, in_channels, T_{in}, V_{in}, M_{in})`
-        - Output: :math:`(N, num_class)` where
+        - Output: :math:`(N, out_channels)` where
             :math:`N` is a batch size,
             :math:`T_{in}` is a length of input sequence,
             :math:`V_{in}` is the number of graph nodes,
             :math:`M_{in}` is the number of instance in a frame.
     """
 
-    def __init__(self, in_channels, num_class, graph_args,
+    def __init__(self, in_channels, out_channels, graph_args,
                  edge_importance_weighting, **kwargs):
         super().__init__()
 
@@ -64,7 +64,7 @@ class Model(nn.Module):
             self.edge_importance = [1] * len(self.st_gcn_networks)
 
         # fcn for prediction
-        self.fcn = nn.Conv2d(256, num_class, kernel_size=1)
+        self.fcn = nn.Conv2d(256, out_channels, kernel_size=1)
 
     def forward(self, x):
 

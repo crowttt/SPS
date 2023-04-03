@@ -104,8 +104,10 @@ def dispatch(config, round_num=0):
         data=payload
     )
 
+    return response.status_code
 
-def next_round(config):
+
+def get_next_round(config):
     label_in_curr_round = 0
     current_round = session.query(func.max(SelectPair.round_num)).scalar()
     while label_in_curr_round is not config.process['pair_batch_size']:
@@ -115,6 +117,7 @@ def next_round(config):
             SelectPair.done == True
         ).count()
         time.sleep(5)
+    # return 2 if current_round == 0 else current_round + 1
     return current_round + 1
 
 

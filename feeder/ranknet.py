@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms
+from sqlalchemy import or_
 
 # operation
 from . import tools
@@ -102,7 +103,9 @@ class Feeder(torch.utils.data.Dataset):
     def history(self):
         selected_pairs = session.query(SelectPair).filter(
             SelectPair.exp_name == self.exp_name,
-            SelectPair.done == True
+            SelectPair.done == True,
+            or_(SelectPair.first_selection > SelectPair.none_selection,
+            SelectPair.sec_selection > SelectPair.none_selection)
         ).all()
         self.label = [1 if pair.first_selection > pair.sec_selection else 0 for pair in selected_pairs]
         pairs = [(pair.first, pair.second) for pair in selected_pairs]
@@ -123,10 +126,10 @@ class Feeder(torch.utils.data.Dataset):
         first_kinetics = [next(q for q in first_kinetics if q.name == name) for name in pairs_first]
         second_kinetics = [next(q for q in second_kinetics if q.name == name) for name in pairs_second]
 
-        if [kinetics.name for kinetics in first_kinetics] == pairs_first:
-            print('Ok')
-        if [kinetics.name for kinetics in second_kinetics] == pairs_second:
-            print('Ok')
+        # if [kinetics.name for kinetics in first_kinetics] == pairs_first:
+        #     print('Ok')
+        # if [kinetics.name for kinetics in second_kinetics] == pairs_second:
+        #     print('Ok')
 
         first_kinetics = [kinetics.index for kinetics in first_kinetics]
         second_kinetics = [kinetics.index for kinetics in second_kinetics]
@@ -187,4 +190,4 @@ class DatasetFeeder(Feeder):
         if self.random_move:
             data = tools.random_move(data)
 
-        return data, name
+        return data, name[:-5]
