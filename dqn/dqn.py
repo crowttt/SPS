@@ -56,7 +56,7 @@ class DQN(object):
         self.embeddor = Model(**(config.embed_args))
         self.optimizer = optim.Adam(self.eval_net.parameters(), lr=config.dqn_args['learning_rate'], weight_decay = config.dqn_args['l2_norm'])
         self.loss_func = nn.MSELoss()
-        self.data_path = config.data['data_path']
+        self.data_path = config.embed_args['embed_path']
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.gpus = visible_gpu(config.device)
         self.ngpus = ngpu(config.device)
@@ -84,28 +84,16 @@ class DQN(object):
         self.curr_state = [(pair.first, pair.second) for pair in select_pair]
 
 
-    def prepare_embedded(self, data, batch_size):
+    def embeded(self, data):
         first = [s[0] for s in data]
         second = [s[1] for s in data]
         first_idx = session.query(Kinetics.index, Kinetics.name).filter(Kinetics.name.in_(first)).all()
         second_idx = session.query(Kinetics.index, Kinetics.name).filter(Kinetics.name.in_(second)).all()
         first_idx = [next(q[0] for q in first_idx if q.name == name) for name in first]
         second_idx = [next(q[0] for q in second_idx if q.name == name) for name in second]
-        data = [np.array((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
-
-        data = [data[i:i+batch_size] for i in range(0, len(data), batch_size)]
-        data_batch = []
-        self.embeddor.eval()
-        for batch in data:
-            batch = np.concatenate(batch, axis=0)
-            with torch.no_grad():
-                batch = self.embeddor(torch.tensor(batch).float().to(self.device))
-            batch = list(torch.split(batch, 2))
-            batch = [d.view(-1) for d in batch]
-            batch = torch.stack(batch)
-            data_batch.append(batch)
-        emb = torch.cat(data_batch)
-        return emb # tensor
+        emb = [torch.cat((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
+        emb = torch.stack(emb)
+        return emb
 
 
     def choose_action(self, candi_pool):
@@ -113,10 +101,10 @@ class DQN(object):
         actions = []
         self.eval_net.eval()
         for candi in candi_pool:
-            candi_emb = self.prepare_embedded(candi, len(candi))
+            candi_emb = self.embeded(candi)
             candi_emb = torch.unsqueeze(candi_emb, 0)
 
-            state_emb = self.prepare_embedded(self.curr_state, 128)
+            state_emb = self.embeded(self.curr_state)
             state_emb = torch.unsqueeze(state_emb, 0)
 
             with torch.no_grad():
@@ -158,9 +146,10 @@ class DQN(object):
 
     def load_data(self, mmap=True):
         if mmap:
-            self.data = np.load(self.data_path, mmap_mode='r')
+            data = np.load(self.data_path, mmap_mode='r')
         else:
-            self.data = np.load(self.data_path)
+            data = np.load(self.data_path)
+        self.data = torch.tensor(data)
 
 
     def learn(self, iter):
@@ -174,17 +163,17 @@ class DQN(object):
         batch = Transition(*zip(*transitions))
 
         lengths_b_s = torch.tensor([len(state) for state in list(batch.state)], dtype=torch.int64)
-        b_s = pad_sequence([self.prepare_embedded(state, batch_size) for state in list(batch.state)], batch_first=True)
+        b_s = pad_sequence([self.embeded(state) for state in list(batch.state)], batch_first=True)
 
         lengths_b_s_ = torch.tensor([len(state) for state in list(batch.next_state)], dtype=torch.int64)
-        b_s_ = pad_sequence([self.prepare_embedded(state, batch_size) for state in list(batch.next_state)], batch_first=True)
+        b_s_ = pad_sequence([self.embeded(state) for state in list(batch.next_state)], batch_first=True)
 
-        b_a_emb = torch.stack([self.prepare_embedded([action], 1) for action in list(batch.action)])
+        b_a_emb = torch.stack([self.embeded([action]) for action in list(batch.action)])
 
         # reward
         b_r = torch.FloatTensor(np.array(batch.reward).reshape(-1, 1)).to(self.device)
 
-        next_candi_emb = torch.stack([self.prepare_embedded(candi, len(candi)) for candi in list(batch.next_candi)])
+        next_candi_emb = torch.stack([self.embeded(candi) for candi in list(batch.next_candi)])
         q_eval = self.eval_net(b_s, b_a_emb, lengths_b_s , choose_action=False)
 
 

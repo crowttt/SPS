@@ -34,6 +34,7 @@ embed_args:
   graph_args:
     layout: 'openpose'
     strategy: 'spatial'
+  embed_path: ./data/embed/embedded.npy
 
 # qnet
 dqn_model: net.qnet.QNet
@@ -55,9 +56,9 @@ process:
   candi_num: 20
   update_times: 500
 
-data:
-  data_path: ./data/Kinetics/train_data.npy
-  label_path: ./data/Kinetics/train_label.pkl
+# data:
+#   data_path: ./data/Kinetics/train_data.npy
+#   label_path: ./data/Kinetics/train_label.pkl
 
 pretrained:
   ranknet: './pretrain/ranknet/ranknet.pt'
