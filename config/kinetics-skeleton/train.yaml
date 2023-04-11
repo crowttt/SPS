@@ -27,6 +27,7 @@ ranknet_train_arg:
 
 # stgec embed
 embed_model: net.stgcn_embed.Model
+embed_path: ./data/embed/embedded.npy
 embed_args:
   in_channels: 3
   out_channels: 400
@@ -55,9 +56,9 @@ process:
   candi_num: 20
   update_times: 500
 
-data:
-  data_path: ./data/Kinetics/train_data.npy
-  label_path: ./data/Kinetics/train_label.pkl
+# data:
+#   data_path: ./data/Kinetics/train_data.npy
+#   label_path: ./data/Kinetics/train_label.pkl
 
 pretrained:
   ranknet: './pretrain/ranknet/ranknet.pt'
