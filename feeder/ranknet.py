@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torchvision import datasets, transforms
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 
 # operation
 from . import tools
@@ -101,9 +101,11 @@ class Feeder(torch.utils.data.Dataset):
         return data, label
 
     def history(self):
+        current_round = session.query(func.max(SelectPair.round_num)).scalar()
         selected_pairs = session.query(SelectPair).filter(
             SelectPair.exp_name == self.exp_name,
             SelectPair.done == True,
+            # SelectPair.round_num >= current_round - 5,
             or_(SelectPair.first_selection > SelectPair.none_selection,
             SelectPair.sec_selection > SelectPair.none_selection)
         ).all()

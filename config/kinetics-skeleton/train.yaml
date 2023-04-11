@@ -27,6 +27,7 @@ ranknet_train_arg:
 
 # stgec embed
 embed_model: net.stgcn_embed.Model
+embed_path: ./data/embed/embedded.npy
 embed_args:
   in_channels: 3
   out_channels: 400
@@ -34,7 +35,6 @@ embed_args:
   graph_args:
     layout: 'openpose'
     strategy: 'spatial'
-  embed_path: ./data/embed/embedded.npy
 
 # qnet
 dqn_model: net.qnet.QNet

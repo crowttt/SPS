@@ -49,7 +49,7 @@ class Process:
                 logger.info(f'[USER] Done')
 
                 logger.info(f'[MEMORY] Updating memory')
-                self.update_memory(actions, candidate_pool, self.current_round)
+                self.update_memory(actions, candidate_pool)
                 logger.info(f'[MEMORY] Done')
 
             logger.info(f'[DQN] Start to train DQN {self.next_round}th round')
@@ -99,7 +99,7 @@ class Process:
     def reload(self):
         if REDIS_ENGINE.get('next') == b't':
             return
-        logger.info(f'[RELOAD] Go to  reload process')
+        logger.info(f'[RELOAD] Go to {self.current_round}th reload process')
         if REDIS_ENGINE.get('candi_flag') == b't':
             logger.info(f'[RELOAD] Reload candiidate')
             candidate_pool = pickle.loads(REDIS_ENGINE.get('candi'))

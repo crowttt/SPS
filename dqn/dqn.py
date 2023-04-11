@@ -56,7 +56,7 @@ class DQN(object):
         self.embeddor = Model(**(config.embed_args))
         self.optimizer = optim.Adam(self.eval_net.parameters(), lr=config.dqn_args['learning_rate'], weight_decay = config.dqn_args['l2_norm'])
         self.loss_func = nn.MSELoss()
-        self.data_path = config.embed_args['embed_path']
+        self.data_path = config.embed_path
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.gpus = visible_gpu(config.device)
         self.ngpus = ngpu(config.device)
@@ -91,8 +91,9 @@ class DQN(object):
         second_idx = session.query(Kinetics.index, Kinetics.name).filter(Kinetics.name.in_(second)).all()
         first_idx = [next(q[0] for q in first_idx if q.name == name) for name in first]
         second_idx = [next(q[0] for q in second_idx if q.name == name) for name in second]
-        emb = [torch.cat((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
-        emb = torch.stack(emb)
+        emb = torch.cat([self.data[first_idx,:], self.data[second_idx,:]], 1)
+        # emb = [torch.cat((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
+        # emb = torch.stack(emb)
         return emb
 
 
@@ -108,7 +109,7 @@ class DQN(object):
             state_emb = torch.unsqueeze(state_emb, 0)
 
             with torch.no_grad():
-                actions_value = self.eval_net(state_emb, candi_emb)
+                actions_value = self.eval_net(state_emb.to(self.device), candi_emb.to(self.device))
             action = candi[actions_value.argmax().item()]
             actions.append(action)
         return actions
@@ -154,26 +155,42 @@ class DQN(object):
 
     def learn(self, iter):
         self.eval_net.train()
-        for target_param, param in zip(self.target_net.parameters(), self.eval_net.parameters()):
-            target_param.data.copy_(self.tau * param.data + target_param.data * (1.0 - self.tau))
+        if iter == 0:
+            for target_param, param in zip(self.target_net.parameters(), self.eval_net.parameters()):
+                target_param.data.copy_(self.tau * param.data + target_param.data * (1.0 - self.tau))
 
         batch_size = self.config.dqn_args['batch_size']
 
         transitions = self.memory.sample(self.config.dqn_args['batch_size'])
         batch = Transition(*zip(*transitions))
 
-        lengths_b_s = torch.tensor([len(state) for state in list(batch.state)], dtype=torch.int64)
-        b_s = pad_sequence([self.embeded(state) for state in list(batch.state)], batch_first=True)
 
-        lengths_b_s_ = torch.tensor([len(state) for state in list(batch.next_state)], dtype=torch.int64)
-        b_s_ = pad_sequence([self.embeded(state) for state in list(batch.next_state)], batch_first=True)
+        lengths = [len(state) for state in list(batch.state)]
+        lengths_b_s = torch.tensor(lengths, dtype=torch.int64)
+        b_s = self.embeded([x for state in batch.state for x in state])
+        b_s = torch.split(b_s, lengths)
+        b_s = pad_sequence(b_s, batch_first=True).to(self.device)
 
-        b_a_emb = torch.stack([self.embeded([action]) for action in list(batch.action)])
+
+        lengths = [len(state) for state in list(batch.next_state)]
+        lengths_b_s_ = torch.tensor(lengths, dtype=torch.int64)
+        b_s_ = self.embeded([x for next_state in batch.next_state for x in next_state])
+        b_s_ = torch.split(b_s_, lengths)
+        b_s_ = pad_sequence(b_s_, batch_first=True).to(self.device)
+
+
+        b_a_emb = torch.unsqueeze(self.embeded(list(batch.action)), 1)
+
 
         # reward
         b_r = torch.FloatTensor(np.array(batch.reward).reshape(-1, 1)).to(self.device)
 
-        next_candi_emb = torch.stack([self.embeded(candi) for candi in list(batch.next_candi)])
+
+        next_candi_emb = self.embeded([x for candi in list(batch.next_candi) for x in candi])
+        next_candi_emb = torch.split(next_candi_emb, self.config.process['candi_num'])
+        next_candi_emb = torch.stack(next_candi_emb).to(self.device)
+
+
         q_eval = self.eval_net(b_s, b_a_emb, lengths_b_s , choose_action=False)
 
 
@@ -188,4 +205,5 @@ class DQN(object):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        print(f"iter: {iter}")
         print(f'loss: {loss.item()}')
