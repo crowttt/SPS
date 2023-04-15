@@ -105,22 +105,12 @@ class Feeder(torch.utils.data.Dataset):
         selected_pairs = session.query(SelectPair).filter(
             SelectPair.exp_name == self.exp_name,
             SelectPair.done == True,
-            # SelectPair.round_num >= current_round - 5,
             or_(SelectPair.first_selection > SelectPair.none_selection,
             SelectPair.sec_selection > SelectPair.none_selection)
         ).all()
         self.label = [1 if pair.first_selection > pair.sec_selection else 0 for pair in selected_pairs]
         pairs = [(pair.first, pair.second) for pair in selected_pairs]
 
-        ######################################
-        # adfsfa = [
-        #     (
-        #         session.query(Kinetics).get(pair[0]).index,
-        #         session.query(Kinetics).get(pair[1]).index
-        #     ) for pair in pairs
-        # ]
-        # adfsfa = list(filter(lambda x : x[0] and x[1] , adfsfa))
-        ######################################
         pairs_first = [pair[0] for pair in pairs]
         pairs_second = [pair[1] for pair in pairs]
         first_kinetics = session.query(Kinetics).filter(Kinetics.name.in_(pairs_first)).all()
@@ -128,24 +118,8 @@ class Feeder(torch.utils.data.Dataset):
         first_kinetics = [next(q for q in first_kinetics if q.name == name) for name in pairs_first]
         second_kinetics = [next(q for q in second_kinetics if q.name == name) for name in pairs_second]
 
-        # if [kinetics.name for kinetics in first_kinetics] == pairs_first:
-        #     print('Ok')
-        # if [kinetics.name for kinetics in second_kinetics] == pairs_second:
-        #     print('Ok')
-
         first_kinetics = [kinetics.index for kinetics in first_kinetics]
         second_kinetics = [kinetics.index for kinetics in second_kinetics]
-
-        # 權宜之計
-        # first_kinetics_tmp = []
-        # second_kinetics_tmp = []
-        # for i in range(len(first_kinetics)):
-        #     if first_kinetics[i].has_skeleton and second_kinetics[i].has_skeleton:
-        #         first_kinetics_tmp.append(first_kinetics[i].index)
-        #         second_kinetics_tmp.append(second_kinetics[i].index)
-        # first_kinetics = first_kinetics_tmp
-        # second_kinetics = second_kinetics_tmp
-        # self.label = self.label[: len(second_kinetics)]
 
         # extract labeled data from total dataset
         self.data_pairs_first = self.data[first_kinetics]
@@ -183,6 +157,7 @@ class DatasetFeeder(Feeder):
         # get data
         data = np.array(self.data[index])
         name = self.sample_name[index]
+        label = self.label[index]
         
         # processing
         if self.random_choose:

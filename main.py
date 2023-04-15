@@ -1,6 +1,8 @@
 import argparse
 from process import Process
 from db.session import session
+from eval.eval import evaluation
+from utils import load_arg
 
 
 def main():
@@ -13,6 +15,9 @@ def main():
     arg = parser.parse_args()
     process = Process(arg)
     process.start()
+    trainer = evaluation(load_arg(arg.config))
+    trainer.train()
+    trainer.test()
     session.close()
 
 

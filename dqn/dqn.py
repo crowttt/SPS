@@ -53,7 +53,6 @@ class DQN(object):
         self.double_q = config.dqn_args['double_q']
         self.gamma = config.dqn_args['gamma']
         self.tau = config.dqn_args['tau']
-        self.embeddor = Model(**(config.embed_args))
         self.optimizer = optim.Adam(self.eval_net.parameters(), lr=config.dqn_args['learning_rate'], weight_decay = config.dqn_args['l2_norm'])
         self.loss_func = nn.MSELoss()
         self.data_path = config.embed_path
@@ -63,10 +62,7 @@ class DQN(object):
         if torch.cuda.is_available():
             self.eval_net.to(self.device)
             self.target_net.to(self.device)
-            self.embeddor.to(self.device)
-            self.embeddor.load_state_dict(torch.load(config.pretrained['embed']))
         if self.ngpus > 1:
-            self.embeddor = nn.DataParallel(self.embeddor, device_ids=self.gpus)
             self.eval_net = nn.DataParallel(self.eval_net, device_ids=self.gpus)
             self.target_net = nn.DataParallel(self.target_net, device_ids=self.gpus)
         self.load_data()
@@ -92,8 +88,7 @@ class DQN(object):
         first_idx = [next(q[0] for q in first_idx if q.name == name) for name in first]
         second_idx = [next(q[0] for q in second_idx if q.name == name) for name in second]
         emb = torch.cat([self.data[first_idx,:], self.data[second_idx,:]], 1)
-        # emb = [torch.cat((self.data[f], self.data[s])) for f, s in zip(first_idx, second_idx)]
-        # emb = torch.stack(emb)
+
         return emb
 
 

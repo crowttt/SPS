@@ -26,7 +26,7 @@ class Model(nn.Module):
             :math:`M_{in}` is the number of instance in a frame.
     """
 
-    def __init__(self, in_channels, out_channels, graph_args,
+    def __init__(self, in_channels, graph_args,
                  edge_importance_weighting, **kwargs):
         super().__init__()
 
@@ -64,7 +64,10 @@ class Model(nn.Module):
             self.edge_importance = [1] * len(self.st_gcn_networks)
 
         # fcn for prediction
-        self.fcn = nn.Conv2d(256, out_channels, kernel_size=1)
+        self.fcn = nn.Conv2d(256, 64, kernel_size=1)
+        # self.fcn1 = nn.Conv2d(128, 64, kernel_size=1)
+        self.fcn1 = nn.Conv2d(64, 1, kernel_size=1)
+        # self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
 
@@ -87,6 +90,9 @@ class Model(nn.Module):
 
         # prediction
         x = self.fcn(x)
+        x = self.fcn1(x)
+        # x = self.fcn2(x)
+        # x = self.relu(x)
         x = x.view(x.size(0), -1)
 
         return x
