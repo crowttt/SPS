@@ -133,3 +133,4 @@ dmypy.json
 data/*
 # pretrain model
 pretrain/*
+static/*
