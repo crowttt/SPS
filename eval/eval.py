@@ -28,9 +28,6 @@ def weights_init(m):
 
 
 class evaluation(Base):
-    
-    # def __init__(self):
-    #     super.__init__()
 
     def load_data(self):
         self.exp_name = self.arg.process['exp_name']
@@ -94,10 +91,7 @@ class evaluation(Base):
 
                 score = self.model(data)
                 self.optimizer.zero_grad()
-                # print(score.view(-1).size())
-                # print(label.size())
                 loss = self.loss_func(score.view(-1), label)
-                # print(loss)
                 loss.backward()
                 self.optimizer.step()
                 total_loss += loss.item()
@@ -150,6 +144,6 @@ class evaluation(Base):
                     data = data.float().to(self.device)
                 score = self.model(data)
             result = result + [(n,float(s)) for n,s in zip(name, score)]
-            # result.append((name, score, label))
+
         result = pd.DataFrame(result, columns=['name', 'score'])
         result.to_csv(f"static/{self.arg.process['exp_name']}_result.csv", sep='\t')
