@@ -134,3 +134,4 @@ data/*
 # pretrain model
 pretrain/*
 static/*
+*.ipynb

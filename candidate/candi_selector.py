@@ -37,7 +37,11 @@ class Candidate(Base):
             )
 
             self.unlabel_data_loader = torch.utils.data.DataLoader(
-                dataset=DatasetFeeder(**self.arg.ranknet_feeder_args),
+                # dataset=DatasetFeeder(**self.arg.ranknet_feeder_args),
+                dataset=DatasetFeeder(
+                    data_path=self.arg.ranknet_feeder_args['data_path'],
+                    label_path=self.arg.ranknet_feeder_args['label_path']
+                ),
                 batch_size=self.arg.ranknet_train_arg['batch_size'] * 32,
                 shuffle=True,
                 num_workers=self.arg.num_worker * self.ngpus,

@@ -21,6 +21,8 @@ from . import tools
 from db.session import session
 from db.model import SelectPair, Kinetics
 
+from config import high_risk_class, low_risk_class
+
 # log
 from loguru import logger
 
@@ -29,9 +31,10 @@ class Feeder(torch.utils.data.Dataset):
     def load_data(self):
         # f'static/{self.exp_name}_scores.csv', sep='\t'
         score = pd.read_csv(self.score_path, sep='\t')
+        score = score[(score['Risk Level'] == 'High') | (score['Risk Level'] == 'Low')]
         score = score.sample(frac=1, random_state=42)
         action = list(score['Action'])
-        level = list(score['Risk Level'])
+        self.level = list(score['Risk Level'])
         self.label = list(score['Risk score'])
 
         kinetics = session.query(Kinetics).filter(Kinetics.name.in_(action)).all()
@@ -48,8 +51,81 @@ class Feeder(torch.utils.data.Dataset):
 
 
     def __getitem__(self, index):
-        return torch.tensor(self.data[index]), torch.tensor(self.label[index])
+        # label = self.label[index]
+        # if label >= 0.9405717314235866:
+        #     label = 2
+        # elif label >= 0.39185750636132316:
+        #     label = 1
+        # else:
+        #     label = 0
+        level = self.level[index]
+        if level == 'High':
+            label = 1
+        else:
+            label = 0
+
+        # if label >= 0.39185750636132316:
+        #     label = 1
+        # else:
+        #     label = 0
+        return torch.tensor(self.data[index]), torch.tensor(label)
 
 
     def __len__(self):
         return len(self.label)
+
+
+class TestFeeder(torch.utils.data.Dataset):
+    def __init__(self,
+                 data_path,
+                 label_path,
+                 random_choose=False,
+                 random_move=False,
+                 window_size=-1,
+                 debug=False,
+                 mmap=True):
+        self.debug = debug
+        self.data_path = data_path
+        self.random_choose = random_choose
+        self.random_move = random_move
+        self.window_size = window_size
+
+        self.load_data()
+
+    def load_data(self):
+        high_risk_kinetic = session.query(Kinetics.index, Kinetics.label_idx, Kinetics.label).filter(
+            Kinetics.label.in_(high_risk_class),
+            Kinetics.has_skeleton == True
+        ).all()
+
+        low_risk_kinetic = session.query(Kinetics.index, Kinetics.label_idx, Kinetics.label).filter(
+            Kinetics.label.in_(low_risk_class),
+            Kinetics.has_skeleton == True
+        ).all()
+
+        data = np.load('./data/Kinetics/train_data.npy', mmap_mode='r')
+        kinetic_index = [k.index for k in high_risk_kinetic + low_risk_kinetic]
+
+        self.classes = [k.label for k in high_risk_kinetic + low_risk_kinetic]
+        self.label = [1 for i in range(len(high_risk_kinetic))] + [0 for i in range(len(low_risk_kinetic))]
+        self.data = data[kinetic_index]
+
+
+    def __len__(self):
+        return len(self.label)
+
+    def __getitem__(self, index):
+        # get data
+        data = self.data[index]
+        label = self.label[index]
+        classes = self.classes[index]
+        
+        # processing
+        if self.random_choose:
+            data = tools.random_choose(data, self.window_size)
+        elif self.window_size > 0:
+            data = tools.auto_pading(data, self.window_size)
+        if self.random_move:
+            data = tools.random_move(data)
+
+        return torch.tensor(data), label, classes
