@@ -1,3 +1,4 @@
+import os
 import random
 from collections import namedtuple
 
@@ -66,6 +67,7 @@ class DQN(object):
             self.eval_net = nn.DataParallel(self.eval_net, device_ids=self.gpus)
             self.target_net = nn.DataParallel(self.target_net, device_ids=self.gpus)
         self.load_data()
+        self.load_model()
 
 
     def initialize(self):
@@ -138,6 +140,14 @@ class DQN(object):
 
     def mem_full(self):
         return self.memory.__len__() > self.config.memory_size
+
+
+    def load_model(self):
+        model_path = f"static/{self.arg.process['exp_name']}3.pt"
+        if os.path.isfile(model_path):
+            pre_model = torch.load(model_path)
+            self.eval_net.load_state_dict(pre_model['model_state_dict'])
+            self.optimizer.load_state_dict(pre_model['optimizer_state_dict'])
 
 
     def load_data(self, mmap=True):

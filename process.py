@@ -5,6 +5,7 @@ from dqn.dqn import DQN
 from utils import load_arg, init_sample, get_next_round, store_action, dispatch
 from loguru import logger
 
+import torch
 from db.session import session
 from db.model import SelectPair
 from config import REDIS_ENGINE
@@ -58,6 +59,10 @@ class Process:
             REDIS_ENGINE.set('next', 't')
             self.init_status()
             
+            torch.save({
+                'model_state_dict': self.dqn.eval_net.state_dict(),
+                'optimizer_state_dict': self.dqn.optimizer.state_dict()}, f'pretrain/dqn/{self.config.process["exp_name"]}.pt')
+
             logger.info(f'[DQN] Done')
 
 
