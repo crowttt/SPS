@@ -64,10 +64,9 @@ class Model(nn.Module):
             self.edge_importance = [1] * len(self.st_gcn_networks)
 
         # fcn for prediction
-        self.fcn = nn.Conv2d(256, 64, kernel_size=1)
-        # self.fcn1 = nn.Conv2d(128, 64, kernel_size=1)
-        self.fcn1 = nn.Conv2d(64, 1, kernel_size=1)
-        # self.relu = nn.ReLU(inplace=True)
+        # self.fcn = nn.Conv2d(256, 64, kernel_size=1)
+        # self.fcn1 = nn.Conv2d(64, 1, kernel_size=1)
+        self.fcn1 = nn.Conv2d(256, 2, kernel_size=1)
 
     def forward(self, x):
 
@@ -89,10 +88,8 @@ class Model(nn.Module):
         x = x.view(N, M, -1, 1, 1).mean(dim=1)
 
         # prediction
-        x = self.fcn(x)
+        # x = self.fcn(x)
         x = self.fcn1(x)
-        # x = self.fcn2(x)
-        # x = self.relu(x)
         x = x.view(x.size(0), -1)
 
         return x
