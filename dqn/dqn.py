@@ -143,7 +143,7 @@ class DQN(object):
 
 
     def load_model(self):
-        model_path = f"static/{self.arg.process['exp_name']}3.pt"
+        model_path = f"static/{self.config.process['exp_name']}.pt"
         if os.path.isfile(model_path):
             pre_model = torch.load(model_path)
             self.eval_net.load_state_dict(pre_model['model_state_dict'])
