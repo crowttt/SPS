@@ -1,5 +1,6 @@
 import argparse
 from process import Process
+# from baseline.random_process import RandomProcess
 from db.session import session
 from eval.eval import evaluation
 from utils import load_arg
@@ -13,11 +14,14 @@ def main():
     parser.add_argument('--device', type=int, default=0, nargs='+', help='the indexes of GPUs for training or testing')
 
     arg = parser.parse_args()
+    # rand_process = RandomProcess(arg)
+    # rand_process.start()
+    #----------------------
     process = Process(arg)
     process.start()
-    trainer = evaluation(load_arg(arg.config))
-    trainer.train()
-    trainer.test()
+    # trainer = evaluation(load_arg(arg.config))
+    # trainer.train()
+    # trainer.test()
     session.close()
 
 

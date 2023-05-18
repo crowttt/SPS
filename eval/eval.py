@@ -1,7 +1,7 @@
 import sys
 import torch
 import torch.nn as nn
-from torch.utils.data import SubsetRandomSampler
+# from torch.utils.data import SubsetRandomSampler
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -35,9 +35,9 @@ class evaluation(Base):
         dataset = Feeder(self.data_path, f'static/{self.exp_name}_scores.csv')
         test_dataset = DatasetFeeder(**self.arg.ranknet_feeder_args)
 
-        train_sampler = SubsetRandomSampler(range(train_size))
-        eval_sampler = SubsetRandomSampler(range(train_size, len(dataset)))
-        test_sampler = SubsetRandomSampler(np.random.choice(range(len(test_dataset)), int(0.2 * len(test_dataset))))
+        # train_sampler = SubsetRandomSampler(range(train_size))
+        # eval_sampler = SubsetRandomSampler(range(train_size, len(dataset)))
+        # test_sampler = SubsetRandomSampler(np.random.choice(range(len(test_dataset)), int(0.2 * len(test_dataset))))
 
         self.train_loader = torch.utils.data.DataLoader(
             dataset=dataset,
@@ -93,10 +93,10 @@ class evaluation(Base):
             
                 torch.save({ 
                     'model_state_dict': self.model.state_dict(), 
-                    'optimizer_state_dict': self.optimizer.state_dict()}, f"static/{self.arg.process['exp_name']}4.pt")
+                    'optimizer_state_dict': self.optimizer.state_dict()}, f"static/{self.arg.process['exp_name']}.pt")
 
         print("Min loss: ",min_loss)
-        np.savetxt(f"static/train_{self.exp_name}.csv", np.asarray( train_loss ), delimiter=",")
+        # np.savetxt(f"static/train_{self.exp_name}.csv", np.asarray( train_loss ), delimiter=",")
 
 
     def test(self):
@@ -120,4 +120,4 @@ class evaluation(Base):
             result = result + [(n,int(c), int(l)) for n,c,l in zip(name, classes, label)]
 
         result = pd.DataFrame(result, columns=['name', 'level', 'label'])
-        result.to_csv(f"static/{self.arg.process['exp_name']}_result13.csv", sep='\t')
+        result.to_csv(f"static/{self.arg.process['exp_name']}_best_result.csv", sep='\t')

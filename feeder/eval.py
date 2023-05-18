@@ -51,23 +51,18 @@ class Feeder(torch.utils.data.Dataset):
 
 
     def __getitem__(self, index):
-        # label = self.label[index]
-        # if label >= 0.9405717314235866:
-        #     label = 2
-        # elif label >= 0.39185750636132316:
+        label = self.label[index]
+
+        # level = self.level[index]
+        # if level == 'High':
         #     label = 1
         # else:
         #     label = 0
-        level = self.level[index]
-        if level == 'High':
+
+        if label >= 0.39185750636132316:
             label = 1
         else:
             label = 0
-
-        # if label >= 0.39185750636132316:
-        #     label = 1
-        # else:
-        #     label = 0
         return torch.tensor(self.data[index]), torch.tensor(label)
 
 

@@ -49,16 +49,12 @@ dqn_args:
 
 
 process:
-  exp_name: 'random_exp'
-  round: 50
+  exp_name: 'first_exp'
+  round: 25
   person_per_batch: 1
   pair_batch_size: 100
   candi_num: 20
-  update_times: 500
-
-# data:
-#   data_path: ./data/Kinetics/train_data.npy
-#   label_path: ./data/Kinetics/train_label.pkl
+  update_times: 200
 
 pretrained:
   ranknet: './pretrain/ranknet/ranknet.pt'

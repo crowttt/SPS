@@ -3,14 +3,14 @@ import redis
 REDIS_ENGINE = redis.StrictRedis.from_url("redis://:password@localhost:6380/1")
 
 high_risk_class = [
+    'wrestling',
+    'capoeira',
     'pole vault',
     'passing American football (in game)',
-    'capoeira',
-    'dunking basketball',
-    'wrestling',
     'dodgeball',
-    'gymnastics tumbling',
     'hammer throw',
+    'gymnastics tumbling',
+    'dunking basketball',
     'shot put',
     # 'high jump'
     # 'dunking basketball'
