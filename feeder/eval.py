@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torchvision import datasets, transforms
 from sqlalchemy import func, or_
 
 # operation
@@ -19,17 +18,13 @@ from . import tools
 
 # db
 from db.session import session
-from db.model import SelectPair, Kinetics
+from db.model import Kinetics
 
 from config import high_risk_class, low_risk_class
-
-# log
-from loguru import logger
 
 
 class Feeder(torch.utils.data.Dataset):
     def load_data(self):
-        # f'static/{self.exp_name}_scores.csv', sep='\t'
         score = pd.read_csv(self.score_path, sep='\t')
         score = score[(score['Risk Level'] == 'High') | (score['Risk Level'] == 'Low')]
         score = score.sample(frac=1, random_state=42)
@@ -53,16 +48,12 @@ class Feeder(torch.utils.data.Dataset):
     def __getitem__(self, index):
         label = self.label[index]
 
-        # level = self.level[index]
-        # if level == 'High':
-        #     label = 1
-        # else:
-        #     label = 0
-
-        if label >= 0.39185750636132316:
+        level = self.level[index]
+        if level == 'High':
             label = 1
         else:
             label = 0
+
         return torch.tensor(self.data[index]), torch.tensor(label)
 
 
@@ -73,12 +64,10 @@ class Feeder(torch.utils.data.Dataset):
 class TestFeeder(torch.utils.data.Dataset):
     def __init__(self,
                  data_path,
-                 label_path,
                  random_choose=False,
                  random_move=False,
                  window_size=-1,
-                 debug=False,
-                 mmap=True):
+                 debug=False):
         self.debug = debug
         self.data_path = data_path
         self.random_choose = random_choose

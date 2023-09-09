@@ -7,7 +7,6 @@ import pandas as pd
 from tqdm import tqdm
 
 from feeder.eval import Feeder, TestFeeder
-from feeder.ranknet import DatasetFeeder
 from net.stgcn_embed import Model
 from utils import Base, ngpu
 
@@ -33,11 +32,6 @@ class evaluation(Base):
         self.exp_name = self.arg.process['exp_name']
         self.data_path = self.arg.ranknet_feeder_args['data_path']
         dataset = Feeder(self.data_path, f'static/{self.exp_name}_scores.csv')
-        test_dataset = DatasetFeeder(**self.arg.ranknet_feeder_args)
-
-        # train_sampler = SubsetRandomSampler(range(train_size))
-        # eval_sampler = SubsetRandomSampler(range(train_size, len(dataset)))
-        # test_sampler = SubsetRandomSampler(np.random.choice(range(len(test_dataset)), int(0.2 * len(test_dataset))))
 
         self.train_loader = torch.utils.data.DataLoader(
             dataset=dataset,
@@ -69,7 +63,6 @@ class evaluation(Base):
         self.load_data()
         min_loss = sys.float_info.max
         train_loss = []
-        test_loss = []
         for i in range(200):
             pbar = tqdm(self.train_loader)
             total_loss = 0.0
@@ -96,13 +89,12 @@ class evaluation(Base):
                     'optimizer_state_dict': self.optimizer.state_dict()}, f"static/{self.arg.process['exp_name']}.pt")
 
         print("Min loss: ",min_loss)
-        # np.savetxt(f"static/train_{self.exp_name}.csv", np.asarray( train_loss ), delimiter=",")
 
 
     def test(self):
         self.load_data()
         pbar = tqdm(self.test_loader)
-        pre_model = torch.load(f"static/{self.arg.process['exp_name']}3.pt")
+        pre_model = torch.load(f"static/{self.arg.process['exp_name']}.pt")
         self.model.load_state_dict(pre_model['model_state_dict'], False)
         self.model = self.model.to(self.device)
         # if self.ngpus > 1:
@@ -120,4 +112,4 @@ class evaluation(Base):
             result = result + [(n,int(c), int(l)) for n,c,l in zip(name, classes, label)]
 
         result = pd.DataFrame(result, columns=['name', 'level', 'label'])
-        result.to_csv(f"static/{self.arg.process['exp_name']}_best_result.csv", sep='\t')
+        result.to_csv(f"static/{self.arg.process['exp_name']}_result.csv", sep='\t')

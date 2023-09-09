@@ -12,8 +12,6 @@ high_risk_class = [
     'gymnastics tumbling',
     'dunking basketball',
     'shot put',
-    # 'high jump'
-    # 'dunking basketball'
     'javelin throw'
 ]
 
